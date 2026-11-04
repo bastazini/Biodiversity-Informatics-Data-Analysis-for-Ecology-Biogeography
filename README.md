@@ -1,4 +1,4 @@
-This is the repository for the final project of the class Biodiversity Informatics: Data Analysis for Ecology & Biogeography (PBCO2 / OEP-A16) at the uNiversity of Bonn.
+This is the repository for the final project of the class Biodiversity Informatics: Data Analysis for Ecology & Biogeography (PBCO2 / OEP-A16) at the University of Bonn.
 Here we will explore Island Biogeography using bird communities data from grasslands patches
 Project Title: Bird Communities in Patchy Grasslands: An Island Biogeography Perspective 
 
