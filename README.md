@@ -2,4 +2,4 @@ This repository contains the code for the final project for the course Biodivers
 
 Project title: Bird Communities in Patchy Grasslands: An Island Biogeography Perspective
 
-The data come from the study [“Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches”](https://link.springer.com/article/10.1007/s10531-026-03518-2)) (Dias et al., 2026), published in Biodiversity and Conservation 519: 111674. The dataset is available in this [Zenodo repository](https://zenodo.org/records/22853918).
+The data come from the study [“Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches”](https://link.springer.com/article/10.1007/s10531-026-03518-2)) (Silva et al., 2026), published in Biodiversity and Conservation 519: 111674. The dataset is available in this [Zenodo repository](https://zenodo.org/records/22853918).
