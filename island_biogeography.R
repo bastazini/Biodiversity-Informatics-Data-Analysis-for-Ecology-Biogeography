@@ -170,6 +170,9 @@ lines(xN, predict(fitSN, data.frame(N = xN), type = "response"), lwd = 2)
 ## TESTING: does habitat variety (bare, water, trees, bog, short grass, tall grass) explain
 ## richness in addition to area?  Habitat diversity = Shannon index of the cover classes.
 cover <- birds[, c("Bare", "Water", "Tree", "Bog", "Short", "Tall")]
+
+#using function diversity from pacakge vegan
+require(vegan)
 birds$HabDiv <- diversity(cover, index = "shannon")
 
 #creating our own shannon-wienner function
