@@ -1,22 +1,23 @@
 ## Bird Communities in Patchy Grasslands: An Island Biogeography Perspective 
 ##
 ## Data source: "Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches" 
-#(Dias et al. 2026, Biodiversity and Conservation 519: 111674)
+#(Silva et al. 2026, Biodiversity and Conservation 519: 111674)
 #https://zenodo.org/records/22853918
 
-## data struture:
+## data structure:
 ## 60 sites (Lines) x 138 variables (Columns; environmental variables and bird species)
 ## 
 ## Bird counts (114 species) in the patch (number of individuals per species per patch)
-## Indepedent variables:
+## Independent variables:
 ##  Area       focal patch area (m2)                  -> ISLAND SIZE
 ##  Proximity  inverse of sum(neighbor area / squared distance) in the buffer
 ##             HIGHER = MORE ISOLATED (fewer, smaller or more distant neighbors)  -> ISOLATION
 ##  Distance   edge-to-edge distance to nearest neighboring patch (m)     -> ISOLATION (simple version)
 ##  Patch shape      shape index (higher = more elongated / complex)
 ##  Bare, Water, Tree, Bog, Short, Tall   cover inside the patch (m2)      -> HABITAT STRUCTURE
-##  Wet, Dry, Natural.forest, Agriculture, Silviculture   area in the buffer (m2)   -> LANDSCAPE
+##  Wet, Dry, Natural.forest, Agriculture, Afforestation   area in the buffer (m2)   -> LANDSCAPE
 ###################################### 
+
 
 
 rm(list = ls()) # clear the workspace
@@ -29,6 +30,7 @@ birds <- read.csv("dataset Influence of habitat structure and spatial configurat
 birds <- birds[!is.na(birds$Area), ]              # drop the empty last row
 names(birds)                                      # check the column names
 
+# Creating new objects for analysis
 species <- birds[, (which(names(birds) == "Tall") + 1):ncol(birds)]   # species columns
 pa      <- species > 0                            # presence/absence (patches x species)
 birds$S <- rowSums(pa)                            # species richness per patch
@@ -130,25 +132,23 @@ anova(combined.effect, inter, test = "F")                    # p < 0.05 = intera
 
 ##PLOT 
 
+##Create some values for prediction
 xA <- 10^seq(log10(min(birds$Area)),      log10(max(birds$Area)),      length.out = 100)
 xP <- 10^seq(log10(min(birds$Proximity)), log10(max(birds$Proximity)), length.out = 100)
 
 
-
-plot(birds$Area, birds$Proximity, log = "xy", pch = 19, col = "grey40",
-     xlab = "Patch area (m2, log scale)", ylab = "Proximity index (log scale)",
-     main = "(c) Are big patches less isolated?")
+#plotting
 
 iso_col <- colorRampPalette(c("gold", "darkred"))(100)[cut(log10(birds$Proximity), 100, labels = FALSE)]
 plot(birds$Area, birds$S, log = "x", pch = 19, col = iso_col,
-     xlab = "Patch area (m2, log scale)", ylab = "Species richness", main = "Combined (red = isolated)")
+     xlab = "Patch area (m2, log scale)", ylab = "Species richness", main = "Comparing isolation levels")
 connected <- unname(quantile(birds$Proximity, 0.1)); isolated <- unname(quantile(birds$Proximity, 0.9))
 lines(xA, predict(combined.effect, data.frame(Area = xA, Proximity = connected), type = "response"), lwd = 2, col = "gold3")
 lines(xA, predict(combined.effect, data.frame(Area = xA, Proximity = isolated),  type = "response"), lwd = 2, col = "darkred")
 legend("topleft", bty = "n", lwd = 2, col = c("gold3", "darkred"), legend = c("well connected", "isolated"))
 
 
-## ---- 6. IS IT JUST A SAMPLING EFFECT? (passive sampling hypothesis) ---------------------
+## ---- 6. PASSIVE SAMPLING HYPOTHESIS ---------------------
 ## TESTING: big patches may have more species simply because they hold more birds.
 ## If so, richness depends on number of individuals, not on area itself.
 summary(lm(log10(N) ~ log10(Area), data = birds))                              # more area -> more birds?
@@ -158,20 +158,23 @@ summary(glm(S ~ log10(Area) + log10(N), data = birds, family = quasipoisson))  #
 par(mfrow = c(1, 2))
 fitN <- lm(log10(N) ~ log10(Area), data = birds)
 plot(birds$Area, birds$N, log = "xy", pch = 19, col = "orange3", xlab = "Patch area (m2)",
-     ylab = "Total number of birds", main = "(a) Bigger patch, more birds")
+     ylab = "Total number of birds", main = "Bigger patch, more birds")
 lines(xA, 10^predict(fitN, data.frame(Area = xA)), lwd = 2)
 fitSN <- glm(S ~ log10(N), data = birds, family = quasipoisson)
 xN <- 10^seq(log10(min(birds$N)), log10(max(birds$N)), length.out = 100)
 plot(birds$N, birds$S, log = "x", pch = 19, col = "purple4", xlab = "Total number of birds",
-     ylab = "Species richness", main = "(b) More birds, more species")
+     ylab = "Species richness", main = "More birds, more species")
 lines(xN, predict(fitSN, data.frame(N = xN), type = "response"), lwd = 2)
 
 ## ---- 7. HABITAT STRUCTURE INSIDE THE PATCH ----------------------------------------------
 ## TESTING: does habitat variety (bare, water, trees, bog, short grass, tall grass) explain
 ## richness in addition to area?  Habitat diversity = Shannon index of the cover classes.
 cover <- birds[, c("Bare", "Water", "Tree", "Bog", "Short", "Tall")]
-birds$HabDiv <- apply(cover, 1, function(x) { p <- x[x > 0] / sum(x); -sum(p * log(p)) })
 birds$HabDiv <- diversity(cover, index = "shannon")
+
+#creating our own shannon-wienner function
+birds$HabDiv <- apply(cover, 1, function(x) { p <- x[x > 0] / sum(x); -sum(p * log(p)) })
+
 summary(lm(HabDiv ~ log10(Area), data = birds))                                      # big patches more varied?
 summary(glm(S ~ log10(Area) + HabDiv, data = birds, family = quasipoisson))          # both matter?
 
@@ -201,49 +204,63 @@ plot(est, 7:1, xlim = range(ci), pch = 19, yaxt = "n", ylab = "", cex = 1.5,
 segments(ci[, 1], 7:1, ci[, 2], 7:1, lwd = 2); abline(v = 0, lty = 2)
 axis(2, 7:1, labs, las = 1)
 
-## ---- 9. WHICH SPECIES NEED BIG PATCHES? --------------------------------------------------------------
-## TESTING: for each species, does the chance of being present rise with patch area?
-## A50 = patch size (m2) at which a species has a 50% chance of being present.
-occ <- colSums(pa)
-sel <- names(occ)[occ >= 8 & occ <= nrow(pa) - 8]            # skip very rare / very common species
-fits <- lapply(sel, function(s) suppressWarnings(glm(pa[, s] ~ log10(birds$Area), family = binomial)))
-names(fits) <- sel
-b1  <- sapply(fits, function(f) coef(f)[2])
-A50 <- 10^sapply(fits, function(f) -coef(f)[1] / coef(f)[2])
-sig <- sapply(fits, function(f) summary(f)$coefficients[2, 4]) < 0.05
-cat(sum(b1 > 0), "of", length(b1), "species are more likely in larger patches;", sum(sig & b1 > 0), "significantly\n")
 
-ok  <- b1 > 0 & A50 < 10 * max(birds$Area)                   # keep sensible A50 values only
-ord <- order(A50[ok]); nm <- gsub("_", " ", names(A50)[ok])[ord]
-par(mfrow = c(1, 1), mar = c(4.5, 11, 3, 1))
-dotchart(A50[ok][ord], labels = nm, log = "x", pch = 19, cex = 0.7,
-         color = ifelse(sig[ok][ord], "firebrick", "grey60"),
-         xlab = "Patch area needed for 50% chance of presence (m2, log)",
-         main = "Area-demanding species (red = significant)")
-
-## ---- 10. SINGLE LARGE OR SEVERAL SMALL? (the SLOSS debate) --------------------------------------------
+## ---- 9. SINGLE LARGE OR SEVERAL SMALL? (the SLOSS debate) --------------------------------------------
 ## TESTING: for the same total area, is it better to protect the largest patches first,
 ## or many small ones? We add patches in different orders and count the species gained.
-area  <- birds$Area
-accum <- function(ord) rowSums(apply(pa[ord, ], 2, cumsum) > 0)
-small_first <- order(area); large_first <- order(-area)
+## ---- SLOSS: single large or several small? ----------------------------------------
+## Question: for the same total area, do the largest patches or the smallest patches
+## contain more species when added one by one?
+
+# Vector with the area (m2) of each patch
+area <- birds$Area
+
+# Function that counts how many species have been found after adding patches one by one.
+# 'ord' = the order in which the patches are added (row numbers of the matrix 'pa')
+accum <- function(ord) {
+  pa_ordered <- pa[ord, ]                      # presence/absence matrix with patches in that order
+  running    <- apply(pa_ordered, 2, cumsum)   # running total per species: how many patches so far hold it
+  found      <- running > 0                    # TRUE once a species has appeared in at least one patch
+  rowSums(found)                               # number of species found after 1, 2, 3, ... patches
+}
+
+# The two deliberate orders
+small_first <- order(area)                     # patch numbers sorted from smallest to largest
+large_first <- order(-area)                    # patch numbers sorted from largest to smallest
+
+# Empty plot with limits that fit all curves:
+# x = from 0 to total area of all patches, y = from 0 to total number of species
 par(mar = c(4.5, 4.5, 3, 1))
-plot(NA, xlim = c(0, sum(area)), ylim = c(0, ncol(pa)), xlab = "Cumulative area (m2)",
-     ylab = "Cumulative number of species", main = "Single large vs several small")
-for (i in 1:100) { r <- sample(nrow(pa)); lines(cumsum(area[r]), accum(r), col = "grey85") }
+plot(NA, xlim = c(0, sum(area)), ylim = c(0, ncol(pa)),
+     xlab = "Cumulative area (m2)", ylab = "Cumulative number of species",
+     main = "Single large vs several small")
+
+# Reference: 100 random orders (grey lines) = what you get without any strategy
+for (i in 1:100) {
+  r <- sample(nrow(pa))                        # random order of the patches
+  lines(cumsum(area[r]), accum(r), col = "grey85")   # x = area added so far, y = species found so far
+}
+
+# Smallest patches first (blue) and largest patches first (red)
 lines(cumsum(area[small_first]), accum(small_first), lwd = 3, col = "steelblue")
 lines(cumsum(area[large_first]), accum(large_first), lwd = 3, col = "firebrick")
+
+# Legend
 legend("bottomright", bty = "n", lwd = c(3, 3, 1), col = c("firebrick", "steelblue", "grey70"),
        legend = c("largest patches first", "smallest patches first", "random order"))
+
+## How to read it: all lines end at the same point (all patches, all species).
+## Blue above red  -> several small patches accumulate species faster per m2.
+## Red above blue  -> the largest patches are more efficient.
+## Grey cloud      -> variation expected by chance; a thick line above it beats random order.
 ## If the blue curve is ABOVE the red one, several small patches hold more species per m2.
 
 
-## ---- Betadiversity Analysis --------------------------------------------------------------------------------
+## ---- Beta-diversity Analysis --------------------------------------------------------------------------------
 
 
-## ---- 11. NESTEDNESS: are poor patches subsets of rich patches? ------------------------------------------
-## Rows = patches (large at the top); columns = species ordered common -> rare.
-## A triangle of filled cells in the top-left = nested pattern.
+## ---- 10. NESTEDNESS: are poor patches subsets of rich patches? ------------------------------------------
+## Using function NODF from package VEGAN (nestedness metric based on overlap and decreasing fill)
 require(vegan)
 nest=nestednodf(species, order = TRUE)
 nest
@@ -256,7 +273,7 @@ plot(nest,
      las = 2)
 
 
-## ---- 12. DO NEARBY PATCHES SHARE MORE SPECIES? (distance decay + ordination) -----------------------------
+## ---- 11. DO NEARBY PATCHES SHARE MORE SPECIES? (distance decay + ordination) -----------------------------
 ## TESTING: similarity in species composition vs geographic distance between patches.
 km_x <- birds$Lon * cos(mean(birds$Lat) * pi / 180) * 111      # rough conversion to km
 km_y <- birds$Lat * 111
@@ -275,4 +292,24 @@ pcoa
 cols <- colorRampPalette(c("gold", "darkgreen"))(100)[cut(log10(birds$Area), 100, labels = FALSE)]
 plot(pcoa, pch = 19, cex = 1.6, col = cols, xlab = "Axis 1", ylab = "Axis 2",
      main = "(b) Community composition (green = larger patch)")
+
+###Bonus: WHICH SPECIES NEED BIG PATCHES? --------------------------------------------------------------
+## TESTING: for each species, does the chance of being present rise with patch area?
+## A50 = patch size (m2) at which a species has a 50% chance of being present.
+occ <- colSums(pa)
+sel <- names(occ)[occ >= 8 & occ <= nrow(pa) - 8]            # skip very rare / very common species
+fits <- lapply(sel, function(s) suppressWarnings(glm(pa[, s] ~ log10(birds$Area), family = binomial)))
+names(fits) <- sel
+b1  <- sapply(fits, function(f) coef(f)[2])
+A50 <- 10^sapply(fits, function(f) -coef(f)[1] / coef(f)[2])
+sig <- sapply(fits, function(f) summary(f)$coefficients[2, 4]) < 0.05
+cat(sum(b1 > 0), "of", length(b1), "species are more likely in larger patches;", sum(sig & b1 > 0), "significantly\n")
+
+ok  <- b1 > 0 & A50 < 10 * max(birds$Area)                   # keep sensible A50 values only
+ord <- order(A50[ok]); nm <- gsub("_", " ", names(A50)[ok])[ord]
+par(mfrow = c(1, 1), mar = c(4.5, 11, 3, 1))
+dotchart(A50[ok][ord], labels = nm, log = "x", pch = 19, cex = 0.7,
+         color = ifelse(sig[ok][ord], "firebrick", "grey60"),
+         xlab = "Patch area needed for 50% chance of presence (m2, log)",
+         main = "Area-demanding species (red = significant)")
 
