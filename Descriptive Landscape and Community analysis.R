@@ -8,8 +8,8 @@ library(vegan)
 options(scipen = 999)            # avoid 1e+05 style axis labels
 
 ## ---- 0. LOAD DATA AND BUILD BASIC VARIABLES ---------------------------------------
-birds <- read.csv("dataset_Influence_of_habitat_structure_and_spatial_configuration_on_bird_abundance_in_wet_grassland_patches.csv",
-                  encoding = "latin1")
+birds <- read.csv("dataset Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches.csv")
+
 birds <- birds[!is.na(birds$Area), ]                         # drop the empty last row
 
 species <- birds[, (which(names(birds) == "Tall") + 1):ncol(birds)]   # abundance matrix (patches x species)
