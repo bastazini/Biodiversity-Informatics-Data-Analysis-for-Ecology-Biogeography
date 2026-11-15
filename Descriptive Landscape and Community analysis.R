@@ -1,8 +1,23 @@
-################################################################################
-## DESCRIPTIVE ANALYSIS: BIRDS IN WET-GRASSLAND PATCHES  (base R + vegan)
-## One row = one patch. Nothing is transformed in the data: logs are applied
-## inside plots or models only.
-################################################################################
+#Bird Communities in Patchy Grasslands: An Island Biogeography Perspective 
+## Descriptive analysis of the dataset "Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches"
+##
+## Data source: "Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches" 
+#(Silva et al. 2026, Biodiversity and Conservation 519: 111674)
+#https://zenodo.org/records/22853918
+##
+## data structure:
+## 60 sites (Lines) x 138 variables (Columns; environmental variables and bird species)
+## 
+## Bird counts (114 species) in the patch (number of individuals per species per patch)
+## Independent variables:
+##  Area       focal patch area (m2)                  -> ISLAND SIZE
+##  Proximity  inverse of sum(neighbor area / squared distance) in the buffer
+##             HIGHER = MORE ISOLATED (fewer, smaller or more distant neighbors)  -> ISOLATION
+##  Distance   edge-to-edge distance to nearest neighboring patch (m)     -> ISOLATION (simple version)
+##  Patch shape      shape index (higher = more elongated / complex)
+##  Bare, Water, Tree, Bog, Short, Tall   cover inside the patch (m2)      -> HABITAT STRUCTURE
+##  Wet, Dry, Natural.forest, Agriculture, Afforestation   area in the buffer (m2)   -> LANDSCAPE
+######################################
 # install.packages("vegan")      # once, if needed
 library(vegan)
 options(scipen = 999)            # avoid 1e+05 style axis labels
@@ -31,7 +46,7 @@ summary(birds[, c("Area", "Proximity", "Distance", "Shape", "S", "N", "HabDiv")]
 ################################################################################
 
 ## ---- A1. Histograms of the main variables ---------------------------------------------
-## QUESTION: what does the sampling design look like? (area is strongly right-skewed)
+## QUESTION: what does the sampling design look like? 
 par(mfrow = c(2, 3), mar = c(4.5, 4.5, 3, 1), las = 1)
 hist(birds$Area, breaks = 15, col = "steelblue", border = "white", main = "Patch area", xlab = "Area (m2)")
 hist(log10(birds$Area), breaks = 15, col = "steelblue", border = "white", main = "Patch area (log10)", xlab = "log10 Area")
@@ -56,7 +71,7 @@ boxplot(S ~ factor(Site), data = birds, col = "orange3", xlab = "Site", ylab = "
 boxplot(S ~ factor(Year), data = birds, col = "orange3", xlab = "Year", ylab = "Species richness", main = "Richness by year")
 
 ## ---- A4. Relationships among variables ---------------------------------------------------------
-## QUESTION: which variables are related before any modelling? (logs only inside the plot)
+## QUESTION: which variables are related before any modelling?
 pairs(log10(birds[, c("Area", "Proximity", "Distance", "Shape", "S", "N")]),
       pch = 19, col = rgb(0, 0, 0, 0.4), main = "Pairs plot (all variables log10)")
 
@@ -149,7 +164,7 @@ hist(jac, breaks = 20, col = "grey60", border = "white", xlab = "Jaccard dissimi
      main = "How different are patches?")
 
 ## ---- C4. Core and satellite species ---------------------------------------------------------------------------------------------
-## QUESTION: how many species are widespread (core) and how many are rare (satellite)?
+## QUESTION: how many species are widespread and how many are rare ?
 frac <- occ / nrow(pa)                                       # proportion of patches occupied
 cat("Core species (> 80% of patches):", sum(frac > 0.8), "\n")
 cat("Satellite species (< 20% of patches):", sum(frac < 0.2), "\n")
