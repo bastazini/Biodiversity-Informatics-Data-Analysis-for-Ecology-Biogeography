@@ -169,3 +169,4 @@ frac <- occ / nrow(pa)                                       # proportion of pat
 cat("Core species (> 80% of patches):", sum(frac > 0.8), "\n")
 cat("Satellite species (< 20% of patches):", sum(frac < 0.2), "\n")
 cat("Singletons (1 patch only):", sum(occ == 1), "\n")
+

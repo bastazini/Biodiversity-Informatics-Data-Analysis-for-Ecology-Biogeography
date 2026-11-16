@@ -1,0 +1,783 @@
+---
+title: "Bird communities in patchy grasslands: an island biogeography perspective"
+subtitle: "R tutorial"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: false
+    code-fold: show
+    code-tools: true
+    theme: cosmo
+    embed-resources: true
+    fig-width: 7
+    fig-height: 5
+    fig-align: center
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| include: false
+options(scipen = 999)   # avoid scientific notation in axis labels
+set.seed(2026)          # random steps (SLOSS, null models) give the same result every time
+```
+
+# Checklist: what you have to do
+
+You will write your report in Word. Use this checklist to make sure you cover everything. Tick each item (`[ ]` → `[x]`) as you finish it.
+
+## Analyses to complete
+
+Each task below has an ecological question, the reason for asking it, and the code. Run the code, understand it, and answer the question in your report. The tutorial has two parts: first you **describe** the data, then you **test hypotheses**.
+
+**Part 1. Descriptive analysis**
+
+*A. The patches*
+
+- [ ] **A1.** Histograms: what does the sampling design look like?
+- [ ] **A2.** Map: how are the patches arranged in space, and where are the rich patches?
+- [ ] **A3.** Boxplots: how much do patches differ among sites and sampling years?
+- [ ] **A4.** Pairs plot: which variables are related before any modelling?
+- [ ] **A5.** Habitat composition: does the mix of habitat types change from small to large patches?
+
+*B. The bird community*
+
+- [ ] **B1.** Rank-abundance curve: is the community dominated by a few species, with many rare ones?
+- [ ] **B2.** Occupancy-frequency and abundance-occupancy: are most species rare or widespread? Are widespread species also abundant?
+- [ ] **B3.** Species accumulation curve: is the sampling complete?
+- [ ] **B4.** Diversity indices: how do richness, diversity and evenness vary among patches?
+- [ ] **B5.** Richness against abundance: how strongly are the number of species and the number of birds linked?
+
+*C. Basic community patterns*
+
+- [ ] **C1.** Heatmap: what does the whole abundance matrix look like at a glance?
+- [ ] **C2.** Cluster dendrogram: which patches have similar species lists? Do they group by site?
+- [ ] **C3.** Beta diversity: how different are patches from each other, on average?
+- [ ] **C4.** Core and satellite species: how many species are widespread and how many are rare?
+
+**Part 2. Inferential analysis**
+
+- [ ] **Task 1.** Species–area relationship: do larger patches hold more species?
+- [ ] **Task 2.** Shape of the species–area relationship: does richness keep rising with area or level off?
+- [ ] **Task 3.** Isolation effect: are more isolated patches poorer in species?
+- [ ] **Task 4.** Area and isolation together: which matters more, and does isolation matter more in small patches?
+- [ ] **Task 5.** Passive sampling: do large patches have more species because of area itself, or because they hold more individuals?
+- [ ] **Task 6.** Habitat structure: do large patches have more species because they contain more habitat types?
+- [ ] **Task 7.** Island, habitat or landscape: which group of factors best explains richness?
+- [ ] **Task 8.** SLOSS: for the same total area, is it better to protect a few large patches or many small ones?
+- [ ] **Task 9.** Nestedness: are the species in poor patches a subset of those in rich patches?
+- [ ] **Task 10.** Community similarity: do nearby patches, or patches of similar size, share more species?
+- [ ] **Bonus.** Which species need large patches?
+
+## What your report must contain
+
+- [ ] **Introduction:** the theory behind the questions and your predictions.
+- [ ] **Methods:** the data, the variables, and for each task the model or test you used and why.
+- [ ] **Results:** a descriptive part (the figures of Part 1 that you consider most informative, with captions) and an inferential part (for each task, a figure or table with a numbered caption and the key statistics: estimate, confidence interval or standard error, test statistic, p-value).
+- [ ] **Interpretation:** for each task, say in your own words whether the prediction was supported.
+- [ ] **Discussion:** link your results to island biogeography theory, mention limitations, and give a conservation implication.
+- [ ] **References:** cite the literature you used **and the R packages** you used.
+- [ ] **Table of packages and functions:** list every package and function you used and why (template below).
+
+## Table of packages and functions (template)
+
+Complete this table in your report. Add one row for each function you use.
+
+| Package | Function | What I used it for | Why this function |
+|:--------|:---------|:-------------------|:------------------|
+| *(example)* base | `lm()` | *Species–area regression* | *Linear regression of a continuous response* |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+# About the data
+
+Bird counts in 60 grassland patches ("habitat islands"), grouped in 10 sites. Source: Silva et al. (2026), *Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches*, data at <https://zenodo.org/records/22853918>.
+
+Each **row is a patch**. The columns are the patch and landscape variables, followed by one column per bird species (number of individuals).
+
+| Variable | Description | Unit | Role |
+|:---------|:------------|:-----|:-----|
+| `Area` | Focal patch area | m² | Island size |
+| `Proximity` | Inverse of the sum of (neighbour area / squared distance) in the buffer. **Higher = more isolated** | index | Isolation |
+| `Distance` | Edge-to-edge distance to the nearest neighbouring patch | m | Isolation (simple measure) |
+| `Shape` | Shape index (higher = more elongated or complex) | index | Patch geometry |
+| `Bare`, `Water`, `Tree`, `Bog`, `Short`, `Tall` | Cover of bare soil, open water, trees and large shrubs, bog, short graminoids and tall graminoids inside the patch | m² | Habitat structure |
+| `Wet`, `Dry`, `Natural.forest`, `Agriculture`, `Silviculture` | Area of each land-cover type in the buffer around the patch (silviculture = afforestation) | m² | Landscape |
+| Species columns | Number of individuals of each species in the patch | count | Community |
+
+::: {.callout-important}
+Do **not** transform columns in the data frame. Apply `log10()` inside `lm()` or `glm()` (or inside `plot()`), so the original units are kept.
+:::
+
+# Loading and preparing the data
+
+```{r}
+#| label: load
+# install.packages("vegan")      # once, if needed
+library(vegan)
+
+birds <- read.csv("dataset Influence of habitat structure and spatial configuration on bird abundance in wet grassland patches.csv",
+                  encoding = "latin1")
+birds <- birds[!is.na(birds$Area), ]                         # drop the empty last row
+names(birds)                                                 # check the column names
+
+species <- birds[, (which(names(birds) == "Tall") + 1):ncol(birds)]   # abundance matrix (patches x species)
+pa      <- species > 0                                       # presence/absence matrix
+cover   <- birds[, c("Bare", "Water", "Tree", "Bog", "Short", "Tall")] # habitat cover inside the patch (m2)
+
+birds$S        <- rowSums(pa)                                # species richness per patch
+birds$N        <- rowSums(species)                           # total abundance per patch
+birds$Shannon  <- diversity(species, index = "shannon")      # Shannon diversity of birds
+birds$Simpson  <- diversity(species, index = "simpson")      # Simpson diversity of birds
+birds$Evenness <- birds$Shannon / log(birds$S)               # Pielou's evenness (0-1)
+birds$HabDiv   <- diversity(cover, index = "shannon")        # habitat diversity inside the patch
+
+cat("Patches:", nrow(birds), "| Species:", ncol(species), "| Sites:", length(unique(birds$Site)), "\n")
+summary(birds[, c("Area", "Proximity", "Distance", "Shape", "S", "N", "HabDiv")])
+```
+
+# Part 1. Descriptive analysis
+
+Before testing hypotheses, describe your data: what the patches look like, what the bird community looks like, and the basic patterns of species composition. These figures form the descriptive part of your Results.
+
+## A. Describing the patches
+
+### A1. Histograms of the main variables
+
+**Ecological question:** What does the sampling design look like?
+
+**Why:** Before any model, you need to know the range and shape of each variable. Strongly skewed variables (a few very large values) are usually analysed on a log scale.
+
+```{r}
+#| label: fig-a1
+#| fig-cap: "Distribution of patch area, isolation, richness, abundance and habitat diversity."
+#| fig-width: 10
+#| fig-height: 6
+par(mfrow = c(2, 3), mar = c(4.5, 4.5, 3, 1), las = 1)
+hist(birds$Area, breaks = 15, col = "steelblue", border = "white", main = "Patch area", xlab = "Area (m2)")
+hist(log10(birds$Area), breaks = 15, col = "steelblue", border = "white", main = "Patch area (log10)", xlab = "log10 Area")
+hist(birds$Proximity, breaks = 15, col = "darkgreen", border = "white", main = "Proximity index", xlab = "Proximity (high = isolated)")
+hist(birds$S, breaks = 10, col = "orange3", border = "white", main = "Species richness", xlab = "Species per patch")
+hist(birds$N, breaks = 15, col = "orange3", border = "white", main = "Total abundance", xlab = "Birds per patch")
+hist(birds$HabDiv, breaks = 10, col = "seagreen4", border = "white", main = "Habitat diversity", xlab = "Shannon index of cover")
+```
+
+### A2. Map of the patches
+
+**Ecological question:** How are the patches arranged in space, and where are the rich patches?
+
+**Why:** The spatial arrangement determines isolation, and patches that are close together may be similar for reasons unrelated to area or isolation (spatial non-independence).
+
+```{r}
+#| label: fig-a2
+#| fig-cap: "Patches in space: size = area, colour = richness (dark = more species)."
+rich_col <- colorRampPalette(c("lightyellow", "darkblue"))(100)[cut(birds$S, 100, labels = FALSE)]
+par(mfrow = c(1, 1), mar = c(4.5, 4.5, 3, 1))
+plot(birds$Lon, birds$Lat, pch = 21, bg = rich_col, col = "grey20",
+     cex = 1 + 3 * sqrt(birds$Area / max(birds$Area)),
+     asp = 1 / cos(mean(birds$Lat) * pi / 180), xlab = "Longitude", ylab = "Latitude",
+     main = "Patches: size = area, colour = richness (dark = more species)")
+```
+
+### A3. Richness among sites and years
+
+**Ecological question:** How much do patches differ among sites and sampling years?
+
+**Why:** Patches in the same site or sampled in the same year are not fully independent, and differences among sites or years could be mistaken for effects of area or isolation.
+
+```{r}
+#| label: fig-a3
+#| fig-cap: "Species richness by site and by sampling year."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+boxplot(S ~ factor(Site), data = birds, col = "orange3", xlab = "Site", ylab = "Species richness", main = "Richness by site")
+boxplot(S ~ factor(Year), data = birds, col = "orange3", xlab = "Year", ylab = "Species richness", main = "Richness by year")
+```
+
+### A4. Relationships among variables
+
+**Ecological question:** Which variables are related before any modelling?
+
+**Why:** If predictors are correlated (for example, large patches also being less isolated), their effects are hard to separate. The pairs plot shows all the relationships at once (all variables are on a log~10~ scale in the plot only).
+
+```{r}
+#| label: fig-a4
+#| fig-cap: "Pairs plot of the main variables (log10 scale)."
+#| fig-width: 8
+#| fig-height: 8
+pairs(log10(birds[, c("Area", "Proximity", "Distance", "Shape", "S", "N")]),
+      pch = 19, col = rgb(0, 0, 0, 0.4), main = "Pairs plot (all variables log10)")
+```
+
+### A5. Habitat composition of each patch
+
+**Ecological question:** Does the mix of habitat types change from small to large patches?
+
+**Why:** The habitat diversity hypothesis (Task 6) says large patches may be richer because they contain more habitat types. This figure shows the proportion of each cover class in every patch, ordered by area.
+
+```{r}
+#| label: fig-a5
+#| fig-cap: "Habitat composition (proportion of each cover class) of each patch, from the smallest to the largest."
+prop <- as.matrix(cover / rowSums(cover))                    # proportion of each cover type
+par(mfrow = c(1, 1), mar = c(4.5, 4.5, 3, 7), xpd = TRUE)
+barplot(t(prop)[, order(birds$Area)], col = hcl.colors(6, "Set 2"), border = NA, names.arg = rep("", nrow(prop)),
+        xlab = "Patches (smallest to largest)", ylab = "Proportion of patch area",
+        main = "Habitat composition")
+legend("right", inset = c(-0.17, 0), legend = colnames(prop), fill = hcl.colors(6, "Set 2"), cex = 0.8, bty = "n")
+```
+
+## B. Describing the bird community
+
+### B1. Rank-abundance curve and most abundant species
+
+**Ecological question:** Is the community dominated by a few species, with many rare ones?
+
+**Why:** The rank-abundance curve shows how individuals are distributed among species. A steep curve means strong dominance; a long tail means many rare species.
+
+```{r}
+#| label: fig-b1
+#| fig-cap: "Rank-abundance curve and the 10 most abundant species."
+#| fig-width: 10
+#| fig-height: 5
+tot <- sort(colSums(species), decreasing = TRUE)             # total abundance of each species
+par(mfrow = c(1, 2), mar = c(4.5, 4.5, 3, 1))
+plot(tot, log = "y", type = "b", pch = 19, col = "steelblue", xlab = "Species rank",
+     ylab = "Total abundance (log scale)", main = "Rank-abundance curve")
+par(mar = c(4.5, 9, 3, 1))
+barplot(rev(head(tot, 10)), horiz = TRUE, las = 1, col = "steelblue", cex.names = 0.7,
+        names.arg = gsub("_", " ", rev(names(head(tot, 10)))), xlab = "Total abundance",
+        main = "10 most abundant species")
+```
+
+### B2. Occupancy-frequency and abundance-occupancy
+
+**Ecological question:** Are most species rare (found in few patches) or widespread? Are widespread species also abundant?
+
+**Why:** These are two classic patterns in community ecology. If most species occupy few patches, many patches are needed to capture the regional species pool. The abundance-occupancy relationship asks whether species that occupy many patches are also more abundant where they occur.
+
+```{r}
+#| label: fig-b2
+#| fig-cap: "Occupancy-frequency distribution and abundance-occupancy relationship."
+#| fig-width: 9
+#| fig-height: 4.5
+occ <- colSums(pa)                                           # number of patches occupied by each species
+par(mfrow = c(1, 2), mar = c(4.5, 4.5, 3, 1))
+hist(occ, breaks = 15, col = "seagreen4", border = "white", xlab = "Number of patches occupied",
+     ylab = "Number of species", main = "Occupancy-frequency")
+plot(occ, colSums(species) / occ, log = "xy", pch = 19, col = "seagreen4",
+     xlab = "Patches occupied (log)", ylab = "Mean abundance where present (log)",
+     main = "Abundance-occupancy")
+abline(lm(log10(colSums(species) / occ) ~ log10(occ)), lwd = 2)
+```
+
+### B3. Species accumulation curve
+
+**Ecological question:** Is the sampling complete? Does the number of species level off as patches are added?
+
+**Why:** If the curve is still rising after the last patch, more sampling would find more species, and the number of species recorded underestimates the regional pool. The grey lines show 100 random orders of adding patches; the red line is their mean.
+
+```{r}
+#| label: fig-b3
+#| fig-cap: "Species accumulation curve: grey = 100 random orders of patches, red = mean."
+acc <- sapply(1:100, function(i) rowSums(apply(pa[sample(nrow(pa)), ], 2, cumsum) > 0))   # 100 random orders
+par(mfrow = c(1, 1))
+matplot(acc, type = "l", lty = 1, col = "grey80", xlab = "Number of patches sampled",
+        ylab = "Cumulative number of species", main = "Species accumulation curve")
+lines(rowMeans(acc), lwd = 3, col = "firebrick")
+```
+
+### B4. Diversity indices per patch
+
+**Ecological question:** How do richness, diversity and evenness vary among patches?
+
+**Why:** Richness counts species but ignores how abundant each one is. Shannon and Simpson diversity combine richness and abundance, and Pielou's evenness (J, from 0 to 1) shows how equally individuals are distributed among species.
+
+```{r}
+#| label: fig-b4
+#| fig-cap: "Distribution of Shannon diversity, Simpson diversity and Pielou's evenness among patches."
+#| fig-width: 10
+#| fig-height: 4
+par(mfrow = c(1, 3), mar = c(4.5, 4.5, 3, 1))
+hist(birds$Shannon,  breaks = 10, col = "orange3", border = "white", main = "Shannon diversity", xlab = "H'")
+hist(birds$Simpson,  breaks = 10, col = "orange3", border = "white", main = "Simpson diversity", xlab = "1 - D")
+hist(birds$Evenness, breaks = 10, col = "orange3", border = "white", main = "Evenness", xlab = "Pielou's J")
+```
+
+### B5. Richness against abundance
+
+**Ecological question:** How strongly are the number of species and the number of birds linked?
+
+**Why:** Patches with more individuals tend to contain more species simply because more individuals sample more species. This relationship is the basis of the passive sampling hypothesis (Task 5).
+
+```{r}
+#| label: fig-b5
+#| fig-cap: "Species richness against total abundance."
+par(mfrow = c(1, 1))
+plot(birds$N, birds$S, log = "x", pch = 19, col = "purple4", xlab = "Total abundance (log scale)",
+     ylab = "Species richness", main = "More birds, more species")
+lines(lowess(log10(birds$N), birds$S) |> (\(l) list(x = 10^l$x, y = l$y))(), lwd = 2)
+```
+
+## C. Basic community patterns
+
+### C1. Heatmap of the abundance matrix
+
+**Ecological question:** What does the whole dataset look like at a glance?
+
+**Why:** A heatmap shows every patch and species at once: patches are ordered by area (largest at the top) and species by total abundance, so you can see how occupancy and abundance relate to patch size and species commonness.
+
+```{r}
+#| label: fig-c1
+#| fig-cap: "Abundance matrix, log10(N + 1): patches ordered by area, species ordered by total abundance."
+#| fig-width: 8
+#| fig-height: 6
+ordP <- order(birds$Area, decreasing = TRUE)
+ordS <- order(colSums(species), decreasing = TRUE)
+heat <- log10(as.matrix(species)[rev(ordP), ordS] + 1)       # log10(abundance + 1) only for the picture
+par(mfrow = c(1, 1), mar = c(4.5, 4.5, 3, 1))
+image(1:ncol(heat), 1:nrow(heat), t(heat), col = colorRampPalette(c("white", "steelblue", "darkblue"))(50),
+      xlab = "Species (most to least abundant)", ylab = "Patches (small to large)",
+      main = "Abundance matrix (log10(N + 1))")
+```
+
+### C2. Cluster dendrogram of patches
+
+**Ecological question:** Which patches have similar species lists? Do they group by site?
+
+**Why:** Clustering shows how similar the patches are in species composition (Jaccard dissimilarity, based on shared species). If patches of the same site cluster together, location influences the community.
+
+```{r}
+#| label: fig-c2
+#| fig-cap: "Cluster of patches based on Jaccard dissimilarity (average linkage)."
+#| fig-width: 10
+#| fig-height: 5
+jac <- vegdist(pa * 1, method = "jaccard", binary = TRUE)    # Jaccard dissimilarity between patches
+clus <- hclust(jac, method = "average")
+par(mar = c(2, 4.5, 3, 1))
+plot(clus, labels = birds$Patch, cex = 0.6, hang = -1, main = "Cluster of patches (Jaccard, average linkage)", xlab = "", sub = "")
+```
+
+### C3. Beta diversity summary
+
+**Ecological question:** How different are patches from each other, on average?
+
+**Why:** Beta diversity measures turnover in species composition among patches. A Jaccard dissimilarity of 0 means two patches have identical species lists, and 1 means they share no species.
+
+```{r}
+#| label: fig-c3
+#| fig-cap: "Jaccard dissimilarity between all pairs of patches."
+cat("\nMean Jaccard dissimilarity between patches:", round(mean(jac), 2),
+    "| range:", round(min(jac), 2), "-", round(max(jac), 2), "\n")
+par(mar = c(4.5, 4.5, 3, 1))
+hist(jac, breaks = 20, col = "grey60", border = "white", xlab = "Jaccard dissimilarity (0 = identical, 1 = no shared species)",
+     main = "How different are patches?")
+```
+
+### C4. Core and satellite species
+
+**Ecological question:** How many species are widespread and how many are rare?
+
+**Why:** Communities are often made of a few widespread (core) species and many rare (satellite) species. Counting them describes this structure and shows how much of the community depends on rare species.
+
+```{r}
+#| label: c4
+frac <- occ / nrow(pa)                                       # proportion of patches occupied
+cat("Core species (> 80% of patches):", sum(frac > 0.8), "\n")
+cat("Satellite species (< 20% of patches):", sum(frac < 0.2), "\n")
+cat("Singletons (1 patch only):", sum(occ == 1), "\n")
+```
+
+# Part 2. Inferential analysis
+
+Now test hypotheses. Each task states an ecological question and the reason for asking it, followed by the code.
+
+## Task 1. Species–area relationship {#task1}
+
+**Ecological question:** Do larger patches hold more species?
+
+**Why:** Island biogeography predicts that large islands have lower extinction rates and so support more species. The species–area relationship (SAR) is usually written as a power law, $S = c\,A^{z}$, which becomes a straight line on log–log axes: $\log_{10}(S) = \log_{10}(c) + z \log_{10}(A)$. The slope *z* measures how fast richness rises with area.
+
+**Hypotheses:** H0: *z* = 0 (richness does not depend on area). H1: *z* > 0.
+
+```{r}
+#| label: sar
+sar <- lm(log10(S) ~ log10(Area), data = birds)
+summary(sar)                                      # slope = z
+confint(sar)
+```
+
+```{r}
+#| label: fig-sar
+#| fig-cap: "Species–area relationship on log–log axes."
+plot(birds$Area, birds$S, log = "xy", pch = 19, col = "steelblue",
+     xlab = "Patch area (m2, log scale)", ylab = "Species richness (log scale)", main = "Area effect")
+abline(sar, lwd = 2, col = "firebrick")
+legend("topleft", bty = "n", legend = paste("z =", round(coef(sar)[2], 2)))
+```
+
+## Task 2. Shape of the species–area relationship {#task2}
+
+**Ecological question:** Does richness keep rising with area (power law), or does it level off (asymptote)?
+
+**Why:** The shape of the SAR tells us whether bigger patches keep adding species, or whether there is a patch size beyond which more area adds little. Different functional forms can fit the same data, so we compare them formally with AICc (the Akaike criterion corrected for small samples). The lower the AICc, the better the model; models with ΔAICc < 2 have similar support.
+
+**Models compared** (all fitted to raw richness, so they can be compared):
+
+- Linear: $S = a + b\,A$
+- Power: $S = c\,A^{z}$
+- Asymptotic: $S = a + b/A$ (with $b<0$, richness rises and levels off at $a$)
+
+```{r}
+#| label: sar-models
+# Starting values for nls() come from simple regressions on the matching scale
+lin_asy <- lm(S ~ I(1 / Area), data = birds)
+
+# Linear model
+linear <- lm(S ~ Area, data = birds)
+
+# Power law:   S = c * Area^z
+power <- nls(S ~ c * Area^z, data = birds,
+             start = list(c = 10^coef(sar)[1], z = coef(sar)[2]))
+
+# Asymptotic:  S = a + b / Area   (b < 0: rises and levels off at a)
+asymptotic <- nls(S ~ a + b / Area, data = birds,
+                  start = list(a = coef(lin_asy)[1], b = coef(lin_asy)[2]))
+
+# ---- Compare models using AICc ----
+# install.packages("bbmle") if not installed
+library(bbmle)
+AICctab(linear, power, asymptotic,
+        nobs = length(birds$Area), weights = TRUE, delta = TRUE, base = TRUE)
+```
+
+```{r}
+#| label: fig-sar-models
+#| fig-cap: "Linear, power and asymptotic species–area models."
+par(las = 1, bty = "l")
+plot(birds$Area, birds$S, pch = 16, col = "grey30",
+     xlab = "Patch area (m2)", ylab = "Species richness (S)")
+
+# Generate ordered values of area for the prediction lines
+area_seq <- seq(min(birds$Area), max(birds$Area), length.out = 200)
+
+abline(linear, col = "red", lwd = 2)                                                 # linear
+lines(area_seq, predict(power, newdata = data.frame(Area = area_seq)),
+      col = "purple", lwd = 2)                                                       # power
+lines(area_seq, predict(asymptotic, newdata = data.frame(Area = area_seq)),
+      col = "blue", lwd = 2)                                                         # asymptotic
+
+legend("topleft", legend = c("Linear", "Power", "Asymptotic"),
+       col = c("red", "purple", "blue"), lty = 1, lwd = 2, bty = "n", cex = 0.9)
+```
+
+## Task 3. Isolation effect {#task3}
+
+**Ecological question:** Are more isolated patches poorer in species?
+
+**Why:** Immigration should decrease with isolation, so isolated islands should receive fewer colonists and hold fewer species. Here isolation is measured with the proximity index, which takes into account the number, size and distance of neighbouring patches. **High proximity values mean a more isolated patch.**
+
+**Hypotheses:** H0: slope = 0. H1: slope < 0 (because high proximity = isolated).
+
+```{r}
+#| label: iso
+iso <- lm(log10(S) ~ log10(Proximity), data = birds)
+summary(iso)
+```
+
+```{r}
+#| label: fig-iso
+#| fig-cap: "Species richness against the proximity index (high = isolated)."
+plot(birds$Proximity, birds$S, log = "xy", pch = 19, col = "darkgreen",
+     xlab = "Proximity index (log scale; high = isolated)", ylab = "Species richness (log scale)",
+     main = "Isolation effect")
+abline(iso, lwd = 2, col = "firebrick")
+```
+
+## Task 4. Area and isolation together {#task4}
+
+**Ecological question:** Which matters more for richness, patch size or isolation? Does isolation matter more in small patches?
+
+**Why:** Area and isolation act at the same time, and large patches may also be less isolated, so they must be analysed together. Richness is a count, so we use a GLM with a log link; *quasipoisson* allows the variance to be larger than the mean (overdispersion). The **rescue effect** predicts that immigration prevents extinction in small patches, so isolation should matter more in small patches: this is tested with an **area × isolation interaction**.
+
+```{r}
+#| label: combined
+combined.effect <- glm(S ~ log10(Area) + log10(Proximity), data = birds, family = quasipoisson)
+summary(combined.effect)
+
+# Does isolation matter more in small patches? (interaction area x isolation)
+inter <- glm(S ~ log10(Area) * log10(Proximity), data = birds, family = quasipoisson)
+anova(combined.effect, inter, test = "F")         # p < 0.05 = interaction present
+```
+
+```{r}
+#| label: fig-combined
+#| fig-cap: "Richness against area, with predicted curves for well-connected (10th percentile) and isolated (90th percentile) patches."
+# Values of area for the predicted curves
+xA <- 10^seq(log10(min(birds$Area)), log10(max(birds$Area)), length.out = 100)
+
+iso_col <- colorRampPalette(c("gold", "darkred"))(100)[cut(log10(birds$Proximity), 100, labels = FALSE)]
+plot(birds$Area, birds$S, log = "x", pch = 19, col = iso_col,
+     xlab = "Patch area (m2, log scale)", ylab = "Species richness", main = "Comparing isolation levels")
+connected <- unname(quantile(birds$Proximity, 0.1)); isolated <- unname(quantile(birds$Proximity, 0.9))
+lines(xA, predict(combined.effect, data.frame(Area = xA, Proximity = connected), type = "response"), lwd = 2, col = "gold3")
+lines(xA, predict(combined.effect, data.frame(Area = xA, Proximity = isolated),  type = "response"), lwd = 2, col = "darkred")
+legend("topleft", bty = "n", lwd = 2, col = c("gold3", "darkred"), legend = c("well connected", "isolated"))
+```
+
+## Task 5. Passive sampling hypothesis {#task5}
+
+**Ecological question:** Do large patches have more species because of area itself, or simply because they hold more individuals?
+
+**Why:** A larger patch holds more birds, and more individuals sample more species by chance (passive sampling). If this is the whole story, richness depends on the number of individuals and **area has no effect once abundance is known**. If area still matters, something else (habitat, lower extinction) is involved.
+
+**Three steps:** (i) does abundance increase with area? (ii) does richness increase with abundance? (iii) does area still affect richness when abundance is in the model?
+
+```{r}
+#| label: passive
+m_N   <- lm(log10(N) ~ log10(Area), data = birds)                              # (i)   more area -> more birds?
+m_SN  <- glm(S ~ log10(N), data = birds, family = quasipoisson)                # (ii)  more birds -> more species?
+m_SAN <- glm(S ~ log10(Area) + log10(N), data = birds, family = quasipoisson)  # (iii) area effect left once N is known?
+
+summary(m_N)
+summary(m_SN)
+summary(m_SAN)
+```
+
+```{r}
+#| label: fig-passive
+#| fig-cap: "(a) Abundance against area. (b) Richness against abundance."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(birds$Area, birds$N, log = "xy", pch = 19, col = "orange3", xlab = "Patch area (m2)",
+     ylab = "Total number of birds", main = "Bigger patch, more birds")
+lines(xA, 10^predict(m_N, data.frame(Area = xA)), lwd = 2)
+
+xN <- 10^seq(log10(min(birds$N)), log10(max(birds$N)), length.out = 100)
+plot(birds$N, birds$S, log = "x", pch = 19, col = "purple4", xlab = "Total number of birds",
+     ylab = "Species richness", main = "More birds, more species")
+lines(xN, predict(m_SN, data.frame(N = xN), type = "response"), lwd = 2)
+par(mfrow = c(1, 1))
+```
+
+## Task 6. Habitat structure inside the patch {#task6}
+
+**Ecological question:** Do large patches have more species because they contain more habitat types?
+
+**Why:** The habitat diversity hypothesis proposes that area increases richness indirectly: large patches contain more habitat types, and each habitat supports different species. We measure habitat diversity with the **Shannon index** of the six cover classes (bare soil, water, trees, bog, short grass, tall grass), already calculated in the data preparation. The test has two parts: do big patches have more diverse habitat? Does habitat diversity explain richness in addition to area?
+
+```{r}
+#| label: habdiv
+# Habitat diversity was already calculated in the data preparation, with the function diversity() from package vegan:
+#   birds$HabDiv <- diversity(cover, index = "shannon")
+head(birds$HabDiv)
+
+# We can also build our own Shannon-Wiener function: same result
+habdiv_own <- apply(cover, 1, function(x) { p <- x[x > 0] / sum(x); -sum(p * log(p)) })
+all.equal(unname(birds$HabDiv), unname(habdiv_own))
+```
+
+```{r}
+#| label: hab-models
+summary(lm(HabDiv ~ log10(Area), data = birds))                                      # big patches more varied?
+summary(glm(S ~ log10(Area) + HabDiv, data = birds, family = quasipoisson))          # both matter?
+```
+
+```{r}
+#| label: fig-hab
+#| fig-cap: "(a) Habitat diversity against area. (b) Richness against habitat diversity."
+#| fig-width: 9
+#| fig-height: 4.5
+fitH <- lm(HabDiv ~ log10(Area), data = birds)
+par(mfrow = c(1, 2))
+plot(birds$Area, birds$HabDiv, log = "x", pch = 19, col = "seagreen4", xlab = "Patch area (m2)",
+     ylab = "Habitat diversity", main = "(a) Are big patches more varied?")
+lines(xA, predict(fitH, data.frame(Area = xA)), lwd = 2)
+plot(birds$HabDiv, birds$S, pch = 19, col = "seagreen4", xlab = "Habitat diversity",
+     ylab = "Species richness", main = "(b) Varied patches, more species")
+abline(lm(S ~ HabDiv, birds), lwd = 2)
+par(mfrow = c(1, 1))
+```
+
+## Task 7. Island, habitat or landscape: what matters most? {#task7}
+
+**Ecological question:** Which group of factors best explains richness: patch size and isolation (island), habitat inside the patch, or the surrounding landscape?
+
+**Why:** Habitat patches are not true islands: the quality of the habitat and the surrounding land use (forest, agriculture, silviculture) can matter as much as area and isolation. A single model with all predictors lets us compare their effects. `scale()` puts every predictor on the same scale (mean 0, SD 1), so each coefficient is the effect of a change of one standard deviation and **the effects can be compared directly**.
+
+```{r}
+#| label: full
+full <- glm(S ~ scale(log10(Area)) + scale(log10(Proximity)) + scale(Shape) + scale(HabDiv) +
+              scale(Natural.forest) + scale(Agriculture) + scale(Silviculture),
+            data = birds, family = quasipoisson)
+summary(full)
+
+# Proportion of deviance explained
+1 - full$deviance / full$null.deviance
+```
+
+```{r}
+#| label: fig-full
+#| fig-cap: "Standardised effects (with 95% confidence intervals) on species richness."
+est <- coef(full)[-1]; ci <- confint.default(full)[-1, ]
+labs <- c("Area", "Proximity (isolation)", "Shape", "Habitat diversity", "Forest", "Agriculture", "Silviculture")
+par(mar = c(4.5, 11, 3, 1))
+plot(est, 7:1, xlim = range(ci), pch = 19, yaxt = "n", ylab = "", cex = 1.5,
+     xlab = "Effect on log richness per 1 SD", main = "What explains richness?")
+segments(ci[, 1], 7:1, ci[, 2], 7:1, lwd = 2); abline(v = 0, lty = 2)
+axis(2, 7:1, labs, las = 1)
+par(mar = c(5, 4, 4, 2) + 0.1)
+```
+
+## Task 8. SLOSS: single large or several small? {#task8}
+
+**Ecological question:** For the same total area, is it better to protect a few large patches or many small ones?
+
+**Why:** The SLOSS debate (**S**ingle **L**arge **O**r **S**everal **S**mall) asks which reserve design protects more species. We add patches one at a time in three orders (smallest first, largest first, random) and count the species accumulated against the cumulative area. If the curve of the small patches is above that of the large patches, small patches add species faster per unit area.
+
+```{r}
+#| label: sloss
+# Vector with the area (m2) of each patch
+area <- birds$Area
+
+# Number of species found after adding patches one by one, in the order 'ord'
+accum <- function(ord) {
+  pa_ordered <- pa[ord, ]                      # presence/absence matrix with patches in that order
+  running    <- apply(pa_ordered, 2, cumsum)   # running total per species
+  found      <- running > 0                    # TRUE once a species has been found
+  rowSums(found)                               # number of species found after 1, 2, 3, ... patches
+}
+
+# The two deliberate orders
+small_first <- order(area)                     # patch numbers from smallest to largest
+large_first <- order(-area)                    # patch numbers from largest to smallest
+```
+
+```{r}
+#| label: fig-sloss
+#| fig-cap: "Species accumulation when adding patches from the smallest (blue) or the largest (red); grey lines show 100 random orders."
+plot(NA, xlim = c(0, sum(area)), ylim = c(0, ncol(pa)),
+     xlab = "Cumulative area (m2)", ylab = "Cumulative number of species",
+     main = "Single large vs several small")
+
+# Reference: 100 random orders (grey lines) = what you get without any strategy
+for (i in 1:100) {
+  r <- sample(nrow(pa))
+  lines(cumsum(area[r]), accum(r), col = "grey85")
+}
+
+# Smallest patches first (blue) and largest patches first (red)
+lines(cumsum(area[small_first]), accum(small_first), lwd = 3, col = "steelblue")
+lines(cumsum(area[large_first]), accum(large_first), lwd = 3, col = "firebrick")
+
+legend("bottomright", bty = "n", lwd = c(3, 3, 1), col = c("firebrick", "steelblue", "grey70"),
+       legend = c("largest patches first", "smallest patches first", "random order"))
+```
+
+## Task 9. Nestedness {#task9}
+
+**Ecological question:** Are the species in poor patches a subset of those in rich patches?
+
+**Why:** If extinction removes species in a fixed order (the most sensitive first), the poorest patches hold a subset of the species of the richest ones: the community is **nested**. Nestedness is measured here with the **NODF** metric (nestedness based on overlap and decreasing fill), which ranges from 0 (no nestedness) to 100 (perfect nestedness). Because NODF is affected by how many species each patch has and how widespread each species is, we also compare it with a **null model** that keeps these totals fixed.
+
+```{r}
+#| label: nestedness
+nest <- nestednodf(species, order = TRUE)
+nest
+```
+
+```{r}
+#| label: fig-nested
+#| fig-cap: "Presence/absence matrix sorted by nestedness (filled cells = species present in a patch)."
+#| fig-height: 6
+par(mar = c(1, 3, 10, 1))
+plot(nest, col = "steelblue4", names = TRUE, main = "", cex.axis = 0.7, las = 2)
+par(mar = c(5, 4, 4, 2) + 0.1)
+```
+
+```{r}
+#| label: nested-null
+# Null model: is NODF higher than expected given row and column totals? (one-sided test)
+nodf_fun  <- function(m) unname(nestednodf(m)$statistic["NODF"])
+nest_null <- oecosimu(pa * 1, nodf_fun, method = "quasiswap", nsimul = 199, alternative = "greater")
+nest_null
+```
+
+## Task 10. Do nearby patches share more species? {#task10}
+
+**Ecological question:** Do nearby patches, or patches of similar size, share more species?
+
+**Why:** If species disperse poorly, nearby patches should be more similar (**distance decay of similarity**). Community composition may also change along the area gradient. We measure dissimilarity between patches with the **Jaccard index** (based on shared species), relate it to geographic distance, and summarise composition with an ordination (**PCoA**), where patches close together have similar species lists. Pairwise distances are not independent observations, so the significance is checked with a **Mantel permutation test**.
+
+```{r}
+#| label: decay
+km_x <- birds$Lon * cos(mean(birds$Lat) * pi / 180) * 111      # rough conversion to km
+km_y <- birds$Lat * 111
+geo  <- dist(cbind(km_x, km_y))
+jac  <- dist(pa * 1, method = "binary")                        # Jaccard dissimilarity
+cor.test(as.vector(geo), as.vector(jac), method = "spearman", exact = FALSE)
+
+# Mantel permutation test (valid p-value for distance matrices)
+mantel(jac, geo, method = "spearman", permutations = 999)
+
+pcoa <- cmdscale(jac, k = 2)                                   # ordination of communities
+# Is a PCoA axis related to patch area?
+cor.test(pcoa[, 2], log10(birds$Area))
+```
+
+```{r}
+#| label: fig-decay
+#| fig-cap: "(a) Distance decay of similarity. (b) PCoA of the bird communities (green = larger patches)."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2), mar = c(4.5, 4.5, 3, 1), las = 1)
+plot(as.vector(geo), 1 - as.vector(jac), pch = 19, col = rgb(0, 0, 0, 0.2),
+     xlab = "Distance between patches (km)", ylab = "Shared species (Jaccard similarity)",
+     main = "(a) Distance decay")
+lines(lowess(as.vector(geo), 1 - as.vector(jac)), lwd = 3, col = "firebrick")
+
+cols <- colorRampPalette(c("gold", "darkgreen"))(100)[cut(log10(birds$Area), 100, labels = FALSE)]
+plot(pcoa, pch = 19, cex = 1.6, col = cols, xlab = "Axis 1", ylab = "Axis 2",
+     main = "(b) Community composition (green = larger patch)")
+par(mfrow = c(1, 1))
+```
+
+## Bonus. Which species need big patches? {#bonus}
+
+**Ecological question:** Which species need large patches, and which can persist in small ones?
+
+**Why:** Species differ in their sensitivity to patch size. For each species we fit a logistic regression of presence/absence on log~10~ area. From it we get **A50**: the patch area at which the species has a 50% probability of being present. Species with a large A50 are area-demanding. Species present in fewer than 8 patches, or absent from fewer than 8, are excluded because their regressions are unreliable.
+
+```{r}
+#| label: species-level
+occ  <- colSums(pa)
+sel  <- names(occ)[occ >= 8 & occ <= nrow(pa) - 8]            # skip very rare / very common species
+fits <- lapply(sel, function(s) suppressWarnings(glm(pa[, s] ~ log10(birds$Area), family = binomial)))
+names(fits) <- sel
+b1  <- sapply(fits, function(f) coef(f)[2])                    # slope: effect of area on presence
+A50 <- 10^sapply(fits, function(f) -coef(f)[1] / coef(f)[2])   # area (m2) for 50% probability of presence
+sig <- sapply(fits, function(f) summary(f)$coefficients[2, 4]) < 0.05
+names(b1) <- names(A50) <- names(sig) <- sel                   # clean names (sapply keeps coefficient names)
+cat(sum(b1 > 0), "of", length(b1), "species are more likely in larger patches;", sum(sig & b1 > 0), "significantly\n")
+
+ok  <- b1 > 0 & A50 < max(birds$Area)                          # positive slope, A50 within the sampled range
+ord <- order(A50[ok]); nm <- gsub("_", " ", names(A50)[ok])[ord]
+```
+
+```{r}
+#| label: fig-a50
+#| fig-cap: "Patch area needed for a 50% probability of presence, per species (red = significant area effect)."
+#| fig-height: 7.5
+par(mfrow = c(1, 1), mar = c(4.5, 11, 3, 1))
+dotchart(A50[ok][ord], labels = nm, log = "x", pch = 19, cex = 0.7,
+         color = ifelse(sig[ok][ord], "firebrick", "grey60"),
+         xlab = "Patch area needed for 50% chance of presence (m2, log)",
+         main = "Area-demanding species (red = significant)")
+```
